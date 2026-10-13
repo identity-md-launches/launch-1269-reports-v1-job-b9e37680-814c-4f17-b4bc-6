@@ -104,9 +104,7 @@ contract V34Test is BaseTest {
 
     function testHookUninitializedCannotOpenOrStartEpochAndCallerCannotStartClock() public {
         MockV4Manager manager = new MockV4Manager();
-        TestV4Market hook = new TestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        TestV4Market hook = new TestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         vm.expectRevert(Unauthorized.selector);
         vm.prank(bob);
         manager.initializeHook(hook);
@@ -124,9 +122,7 @@ contract V34Test is BaseTest {
 
     function testLaunchTaxExactBoundaries() public {
         MockV4Manager manager = new MockV4Manager();
-        TestV4Market hook = new TestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        TestV4Market hook = new TestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         manager.initializeHook(hook);
         uint256 t = hook.initializedAt();
         vm.warp(t + 10 minutes - 1);
@@ -158,7 +154,7 @@ contract V34Test is BaseTest {
     function testRemainderTransferredToPredictedPoolBeforeDeploymentAndNoApprovalNeeded() public {
         uint256 principal = 200_000_000 ether;
         MockGameRegistry r = mockRegistry(address(market), principal);
-        LocalApplicationFactory f = new LocalApplicationFactory();
+        LocalApplicationFactory f = deployment.localFactory();
         bytes memory init = bytes.concat(type(RewardPool).creationCode, abi.encode(address(r)));
         address predicted = f.predictContract(30, 0, init);
         assertEq(predicted.code.length, 0);

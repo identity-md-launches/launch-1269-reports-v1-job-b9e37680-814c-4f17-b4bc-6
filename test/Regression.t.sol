@@ -143,10 +143,17 @@ contract RegressionTest is DeferredEntryTest {
         assertEq(d.farm.count(), 0);
         place(alice, 0, 0, 0);
         assertEq(d.farm.count(), 1);
+        vm.expectRevert(Unauthorized.selector); // v3.14: only the owner retires their farm
+        d.farm.retire(alice);
         vm.expectRevert(InvalidValue.selector);
+        vm.prank(alice);
         d.farm.retire(alice);
         vm.prank(alice);
         d.farm.unplace(0, 0);
+        vm.expectRevert(Unauthorized.selector);
+        vm.prank(bob);
+        d.farm.retire(alice);
+        vm.prank(alice);
         d.farm.retire(alice);
         assertEq(d.farm.count(), 0);
         assertTrue(d.farm.hasFarm(alice));

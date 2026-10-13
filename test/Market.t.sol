@@ -14,9 +14,7 @@ contract MarketTest is BaseTest {
     function setUp() public override {
         super.setUp();
         manager = new MockV4Manager();
-        hook = new TestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        hook = new TestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         d.fees = canonicalFees(address(hook));
         vm.prank(team);
         bindHook(hook, address(d.fees));
@@ -37,13 +35,13 @@ contract MarketTest is BaseTest {
         vm.expectRevert(NotConfigured.selector);
         hook.quote(1 ether);
         vm.warp(launch + 31 minutes);
-        assertEq(hook.quote(1 ether), 0.99 ether);
+        assertEq(hook.quote(1 ether), 0.977625 ether); // 0.99 x 0.9875: hook 1% and pool 1.25% (v3.14)
         manager.setSqrt(uint160(2 << 96));
         sell(5 ether);
-        assertEq(hook.quote(1 ether), 0.99 ether);
+        assertEq(hook.quote(1 ether), 0.977625 ether); // 0.99 x 0.9875: hook 1% and pool 1.25% (v3.14)
         assertEq(hook.lastPrice(), 4 ether);
         vm.warp(vm.getBlockTimestamp() + 31 minutes);
-        assertEq(hook.quote(1 ether), 3.96 ether);
+        assertEq(hook.quote(1 ether), 3.9105 ether); // 3.96 x 0.9875
     }
 
     function testSingleDumpIncludesItselfAndFeeDecaysWithoutGriefReset() public {
@@ -74,7 +72,7 @@ contract MarketTest is BaseTest {
         sell(1 ether);
         vm.warp(start + 30 minutes);
         // Fifteen minutes at 0.25 ETH/token and fifteen at 1 ETH/token average 0.625; 1% hook share.
-        assertEq(hook.quote(1 ether), 1.584 ether);
+        assertEq(hook.quote(1 ether), 1.5642 ether); // 1.584 x 0.9875
     }
 
     function testOnlyManagerCorrectPoolExactInputAndHookAddress() public {
@@ -88,16 +86,7 @@ contract MarketTest is BaseTest {
         vm.expectRevert(Unauthorized.selector);
         hook.unlockCallback("");
         vm.expectRevert(InvalidAddress.selector);
-        new V4Market(
-            address(manager),
-            address(token),
-            12500,
-            60,
-            address(this),
-            address(bindingFactory),
-            address(desk),
-            bindingConfigHash()
-        );
+        new V4Market(address(manager), address(token), 12500, 60, address(this), address(desk), bindingConfigHash());
     }
 
     /// @dev v3.9: after the launch window a buy pays exactly 1% to the hook, all of it to reward buys.

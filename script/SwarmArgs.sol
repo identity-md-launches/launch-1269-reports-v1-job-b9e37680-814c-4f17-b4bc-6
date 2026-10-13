@@ -3,7 +3,8 @@ pragma solidity 0.8.26;
 import {SwarmDesk} from "../src/SwarmDesk.sol";
 import "../src/lib/Errors.sol";
 
-/// @notice Offline constructor encoding: exactly twelve static words, no tuple/dynamic arguments (v3.9).
+/// @notice Offline constructor encoding: exactly seven static words, no tuple/dynamic arguments (v3.14).
+/// The IMD protocol addresses (intake, delivery, signer, asset, factory) are bytecode constants (src/lib/IMD.sol).
 library SwarmArgs {
     /// @dev policyWord = chainId[0:32] | fromBlock[32:80] | toBlock[80:128] | maxPrice[128:224] | heartbeatBps[224:240].
     function policy(SwarmDesk.OracleConfig memory o, SwarmDesk.BindingConfig memory b) internal pure returns (uint256) {
@@ -22,9 +23,8 @@ library SwarmArgs {
         pure
         returns (bytes memory)
     {
-        return bytes.concat(
-            abi.encode(o.intake, o.delivery, o.signer, o.asset, o.action, policy(o, b)),
-            abi.encode(o.questions[0], o.questions[1], o.bodies[0], o.bodies[1], b.factory, b.gameConfigHash)
+        return abi.encode(
+            o.action, policy(o, b), o.questions[0], o.questions[1], o.bodies[0], o.bodies[1], b.gameConfigHash
         );
     }
 }

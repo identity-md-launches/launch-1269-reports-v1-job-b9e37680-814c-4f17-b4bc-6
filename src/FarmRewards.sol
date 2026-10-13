@@ -483,7 +483,7 @@ contract FarmRewards is GameModule, ReentrancyGuard {
             v.amount = 0;
         }
         v.epoch = uint64(e);
-        if (at > v.at || v.amount == 0) v.at = uint64(at);
+        if (v.amount == 0 || at < v.at) v.at = uint64(at); // v3.14: a later credit never delays the earlier one
         v.amount += amount;
         emit Credited(p, e, amount);
     }

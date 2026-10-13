@@ -43,11 +43,11 @@ abstract contract BaseTest is Test {
         token = new MockToken();
         market = new MockMarket(address(token));
         market.configureLaunch(launch - 1 hours, address(this));
-        bindingFactory = new LocalApplicationFactory();
         token.transfer(address(market), 100_000_000 ether);
         address fixture = makeAddr("deployment script fixture");
         vm.etch(fixture, vm.getDeployedCode("Deploy.s.sol:Deploy"));
         deployment = Deploy(fixture);
+        bindingFactory = deployment.localFactory();
         d = deployment.deploy(
             Deploy.Config(
                 address(token),
@@ -196,8 +196,7 @@ abstract contract BaseTest is Test {
                 keccak256(abi.encode(uint256(17), alice)),
                 freePackRoot(),
                 uint256(23_000_000),
-                uint256(0),
-                address(bindingFactory)
+                uint256(0)
             )
         );
         GameRegistry r = GameRegistry(bindingFactory.deploy(7, 1, code));

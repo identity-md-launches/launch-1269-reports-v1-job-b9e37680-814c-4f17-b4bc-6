@@ -9,13 +9,7 @@ contract FactoryTest is BaseTest {
     function testHookFactoryFlagsImmutableConfigAndIdempotence() public {
         MarketFactory factory = new MarketFactory();
         MarketFactory.Config memory c = MarketFactory.Config(
-            makeAddr("test manager"),
-            address(token),
-            60,
-            address(this),
-            address(bindingFactory),
-            address(desk),
-            bindingConfigHash()
+            makeAddr("test manager"), address(token), 60, address(this), address(desk), bindingConfigHash()
         );
         (bytes32 salt, address predicted) = factory.findSalt(c, 0, 100000);
         assertEq(uint160(predicted) & 0x3fff, 0x10cc);

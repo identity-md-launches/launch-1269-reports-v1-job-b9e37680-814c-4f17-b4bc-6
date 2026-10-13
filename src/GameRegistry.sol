@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 import {ILaunchHook} from "./interfaces/ILaunchHook.sol";
 import {IGameRegistry} from "./interfaces/IGameRegistry.sol";
 import {ModuleCode} from "./lib/ModuleCode.sol";
+import {IMD} from "./lib/IMD.sol";
 import "./lib/Errors.sol";
 
 interface IApplicationFactory {
@@ -24,7 +25,8 @@ contract GameRegistry is IGameRegistry {
     bytes32 public immutable freeRoot;
     uint256 public immutable snapshotBlock;
     uint256 public immutable endowment;
-    IApplicationFactory public immutable factory;
+    /// @notice The IMD ProjectFactory, fixed in bytecode (v3.14, src/lib/IMD.sol): never a constructor word.
+    IApplicationFactory public constant factory = IApplicationFactory(IMD.PROJECT_FACTORY);
     mapping(uint256 => address) private modules;
     uint256 public registered;
     event Registered(uint256 indexed role, address indexed module, uint64 launchNumber, uint256 index);
@@ -36,12 +38,11 @@ contract GameRegistry is IGameRegistry {
         bytes32 root_,
         bytes32 freeRoot_,
         uint256 snapshot_,
-        uint256 endowment_,
-        address factory_
+        uint256 endowment_
     ) {
         if (
-            token_ == address(0) || params_ == address(0) || market_ == address(0) || factory_ == address(0)
-                || freeRoot_ == bytes32(0) || root_ == bytes32(0) || snapshot_ == 0 || endowment_ > 250_000_000 ether
+            token_ == address(0) || params_ == address(0) || market_ == address(0) || freeRoot_ == bytes32(0)
+                || root_ == bytes32(0) || snapshot_ == 0 || endowment_ > 250_000_000 ether
         ) revert InvalidValue();
         token = token_;
         params = params_;
@@ -50,7 +51,6 @@ contract GameRegistry is IGameRegistry {
         freeRoot = freeRoot_;
         snapshotBlock = snapshot_;
         endowment = endowment_;
-        factory = IApplicationFactory(factory_);
     }
 
     function launchTime() external view returns (uint256) {

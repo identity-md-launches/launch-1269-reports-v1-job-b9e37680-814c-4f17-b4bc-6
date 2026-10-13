@@ -16,6 +16,7 @@ import {PackSale} from "./PackSale.sol";
 import {Economy} from "./Economy.sol";
 import {ChainClock} from "./lib/ChainClock.sol";
 import {SwarmCode} from "./lib/SwarmCode.sol";
+import {IMD} from "./lib/IMD.sol";
 import "./lib/Errors.sol";
 
 interface ISwarmIntake {
@@ -43,6 +44,13 @@ interface ISwarmFactory {
 
 interface ISwarmRegistry is IGameRegistry {
     function factory() external view returns (address);
+}
+
+/// @dev The launch hook's immutables, probed at bind time (V4Market exposes all three).
+interface IBoundHook {
+    function desk() external view returns (address);
+    function token() external view returns (address);
+    function gameConfigHash() external view returns (bytes32);
 }
 
 /// @notice BLACKOUT's only swarm authority. No owner, arbitrary calls, withdrawals or upgrades.
@@ -114,33 +122,30 @@ contract SwarmDesk is OracleAttestationConsumer, ReentrancyGuard {
     event Executed(uint8 indexed stream, bytes32 indexed requestId, bytes32 letterHash);
     event ActionSkipped(uint8 indexed action, bytes reason);
 
-    /// @dev Twelve static ABI words fit the launcher's flat constructor encoder and the legacy (non via-IR)
-    /// code generator the IMD verifier builds with, which decodes at most twelve such arguments (v3.9).
+    /// @dev Seven static ABI words (v3.14) fit the launcher's flat constructor encoder and the legacy (non
+    /// via-IR) code generator the IMD verifier builds with. Every IMD protocol address (Intake, IntakeDelivery,
+    /// attester, Robinhood IMD, ProjectFactory) is a compile-time constant (src/lib/IMD.sol): the IMD manifest
+    /// gate refuses them as constructor words.
     /// policyWord = chainId[0:32] | fromBlock[32:80] | toBlock[80:128] | maxPrice[128:224] | heartbeatBps[224:240];
     /// bits 240-255 must be zero. No launch coordinate is taken: IMD launch numbers cannot be reserved, so
     /// they are supplied and proven at bind time (v3.8). The heartbeat cap is fixed at 1 ether.
     /// gameConfigHash = keccak256(abi.encode(starterRoot, freeRoot, snapshotBlock, endowment)); the token
     /// is deliberately excluded because the Desk bootstrap precedes the token launch.
     constructor(
-        address intake_,
-        address delivery_,
-        address signer_,
-        address asset_,
         bytes32 action_,
         uint256 policyWord,
         bytes32 eventQuestion,
         bytes32 regulatorQuestion,
         bytes32 eventBody,
         bytes32 regulatorBody,
-        address factory_,
         bytes32 gameConfigHash_
-    ) OracleAttestationConsumer(signer_) {
+    ) OracleAttestationConsumer(IMD.ATTESTER) {
         if (policyWord >> 240 != 0) revert InvalidValue();
         OracleConfig memory o;
-        o.intake = intake_;
-        o.delivery = delivery_;
-        o.signer = signer_;
-        o.asset = asset_;
+        o.intake = IMD.INTAKE;
+        o.delivery = IMD.INTAKE_DELIVERY;
+        o.signer = IMD.ATTESTER;
+        o.asset = IMD.IMD_TOKEN;
         o.action = action_;
         o.questionChain = uint32(policyWord);
         o.fromBlock = uint48(policyWord >> 32);
@@ -149,16 +154,15 @@ contract SwarmDesk is OracleAttestationConsumer, ReentrancyGuard {
         o.questions = [eventQuestion, regulatorQuestion];
         o.bodies = [eventBody, regulatorBody];
         BindingConfig memory b;
-        b.factory = factory_;
+        b.factory = IMD.PROJECT_FACTORY;
         b.heartbeatBps = uint16(policyWord >> 224);
         b.heartbeatCap = 1 ether;
         b.gameConfigHash = gameConfigHash_;
         if (
-            o.intake == address(0) || o.delivery == address(0) || o.asset == address(0) || o.intake == o.delivery
-                || o.action == bytes32(0) || o.maxPrice == 0 || o.questionChain == 0 || o.toBlock < o.fromBlock
+            o.action == bytes32(0) || o.maxPrice == 0 || o.questionChain == 0 || o.toBlock < o.fromBlock
                 || o.questions[0] == bytes32(0) || o.questions[1] == bytes32(0) || o.questions[0] == o.questions[1]
-                || o.bodies[0] == bytes32(0) || o.bodies[1] == bytes32(0) || b.factory == address(0)
-                || b.gameConfigHash == bytes32(0) || b.heartbeatBps < 200 || b.heartbeatBps > 5000
+                || o.bodies[0] == bytes32(0) || o.bodies[1] == bytes32(0) || b.gameConfigHash == bytes32(0)
+                || b.heartbeatBps < 200 || b.heartbeatBps > 5000
         ) revert InvalidValue();
         config = o;
         binding = b;
@@ -200,6 +204,13 @@ contract SwarmDesk is OracleAttestationConsumer, ReentrancyGuard {
         if (r.params() != p) revert InvalidProof();
         if (_predictRegistry(r, p, registryLaunch, registryIndex, registryCode) != candidate) revert InvalidProof();
         if (candidate.code.length == 0) revert InvalidProof();
+        // v3.14 (audit a8730286 M): the registry's market must be a launch hook of this Desk for the registry's
+        // token and this game configuration. A twin naming a foreign market or token is refused; an EOA market
+        // reverts on the probe.
+        IBoundHook h = IBoundHook(r.market());
+        if (h.desk() != address(this) || h.token() != r.token() || h.gameConfigHash() != binding.gameConfigHash) {
+            revert InvalidProof();
+        }
         binding.registryLaunch = registryLaunch;
         binding.registryIndex = registryIndex;
         binding.paramsLaunch = paramsLaunch;
@@ -220,9 +231,8 @@ contract SwarmDesk is OracleAttestationConsumer, ReentrancyGuard {
         view
         returns (address)
     {
-        bytes memory args = abi.encode(
-            r.token(), p, r.market(), r.starterRoot(), r.freeRoot(), r.snapshotBlock(), r.endowment(), binding.factory
-        );
+        bytes memory args =
+            abi.encode(r.token(), p, r.market(), r.starterRoot(), r.freeRoot(), r.snapshotBlock(), r.endowment());
         return ISwarmFactory(binding.factory).predictContract(launch, index, bytes.concat(code, args));
     }
 
@@ -411,9 +421,9 @@ contract SwarmDesk is OracleAttestationConsumer, ReentrancyGuard {
         for (uint256 i; i < 8; ++i) {
             uint256 packed = uint256(v[i + 1]);
             uint256 key = packed >> 248;
-            if (key == 0) continue;
+            if (key == 0 || key > 45) continue; // v3.14: an unknown key is skipped, never clamped onto RepairHours
             uint256 target = packed & type(uint248).max;
-            Params.Key k = Params.Key(_clamp(key, 1, 45) - 1);
+            Params.Key k = Params.Key(key - 1);
             uint256 old = params.get(k);
             (uint256 lo, uint256 hi) = params.bounds(k);
             target = _clamp(_clamp(target, lo, hi), old - old / 10, old + old / 10);

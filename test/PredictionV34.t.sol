@@ -31,9 +31,7 @@ contract PredictionV34Test is BaseTest {
             1,
             bytes.concat(
                 type(GameRegistry).creationCode,
-                abi.encode(
-                    c.token, c.params, c.hook, c.starterRoot, c.freeRoot, c.snapshotBlock, c.endowment, c.factory
-                )
+                abi.encode(c.token, c.params, c.hook, c.starterRoot, c.freeRoot, c.snapshotBlock, c.endowment)
             )
         );
         assertEq(deployed, registry);

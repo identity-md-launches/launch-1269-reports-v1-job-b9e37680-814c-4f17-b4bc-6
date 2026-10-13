@@ -109,7 +109,9 @@ contract SeasonAuditTest is BaseTest {
         assertEq(d.season.tickets(0, alice), 280_000);
         vm.prank(alice);
         uint256 item = d.season.claimLottery(0);
-        assertGe(d.items.data(item).rarity, 2);
+        (address receiptOwner,,,,, bool guaranteed,,,) = d.packs.commits(item); // v3.14: a guaranteed pack receipt
+        assertEq(receiptOwner, alice);
+        assertTrue(guaranteed);
         vm.expectRevert(InvalidValue.selector);
         vm.prank(alice);
         d.season.claimLottery(0);
@@ -146,16 +148,17 @@ contract SeasonAuditTest is BaseTest {
         for (uint256 i; i < 15; ++i) {
             mintItem(alice, uint8(i % 12), 0);
         }
+        // v3.14: the claim no longer mints into the inventory, so it succeeds with a full inventory.
+        uint256 before_ = token.balanceOf(alice);
+        vm.prank(alice);
+        uint256 id = d.season.claimLottery(0);
+        assertTrue(d.season.lotteryClaimed(0, alice));
+        assertGe(token.balanceOf(alice), before_); // an empty pot still claims; the receipt is the entitlement
+        (address receiptOwner,,,,,,,,) = d.packs.commits(id);
+        assertEq(receiptOwner, alice);
         vm.expectRevert(InvalidValue.selector);
         vm.prank(alice);
         d.season.claimLottery(0);
-        assertFalse(d.season.lotteryClaimed(0, alice));
-        step();
-        vm.prank(alice);
-        d.farm.expand(true);
-        vm.prank(alice);
-        d.season.claimLottery(0);
-        assertTrue(d.season.lotteryClaimed(0, alice));
     }
 
     function testPackSupplyDropOnlyActiveFarmsAtDoublePace() public {

@@ -33,9 +33,7 @@ contract HookBindingTest is BaseTest {
     function setUp() public override {
         super.setUp();
         manager = new MockV4Manager();
-        hook = new TestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        hook = new TestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         vm.deal(address(manager), 100 ether);
         manager.initializeHook(hook);
         vm.warp(vm.getBlockTimestamp() + 60 minutes); // past the v3.3 launch tax and max-buy window

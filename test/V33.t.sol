@@ -463,9 +463,7 @@ contract LaunchProtectionTest is BaseTest {
     function setUp() public override {
         super.setUp();
         manager = new MockV4Manager();
-        hook = new TestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        hook = new TestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         d.fees = canonicalFees(address(hook));
         vm.prank(team);
         bindHook(hook, address(d.fees));
@@ -481,9 +479,7 @@ contract LaunchProtectionTest is BaseTest {
     }
 
     function testViewsBeforeInitialization() public {
-        TestV4Market fresh = new TestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        TestV4Market fresh = new TestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         assertEq(fresh.currentBuyTaxBps(), 9000);
         assertEq(fresh.launchTaxTimeLeft(), 30 minutes);
         assertEq(fresh.maxBuy(), type(uint256).max);

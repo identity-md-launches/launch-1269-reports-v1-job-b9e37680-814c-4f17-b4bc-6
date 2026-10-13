@@ -8,11 +8,13 @@ const vectors=JSON.parse(readFileSync('test/fixtures/oracle-hash-vectors.json','
 for(const v of vectors)assert.equal(oracleQuestionHash(v.body),v.questionHash);
 const config=JSON.parse(readFileSync('docs/oracle-v37/oracle-config.json','utf8'));
 // Local encoder fixtures only: never a production launch configuration.
-const binding={factory:'0x1234567890123456789012345678901234567890',registryLaunch:'0',registryIndex:0,paramsLaunch:'0',paramsIndex:0,heartbeatBps:200,heartbeatCap:'1000000000000000000',gameConfigHash:keccak256(utf8('fixture'))};
+const binding={factory:'0x9c9d2fcb75c2c132c0ac0c42df3819a42347265e',registryLaunch:'0',registryIndex:0,paramsLaunch:'0',paramsIndex:0,heartbeatBps:200,heartbeatCap:'1000000000000000000',gameConfigHash:keccak256(utf8('fixture'))};
 const constructorArgs=swarmConstructorArgs(config,binding);
-assert.equal(constructorArgs.length,12);assert.equal(constructorArgs.map(word).join('').length,12*64);
+assert.equal(constructorArgs.length,7);assert.equal(constructorArgs.map(word).join('').length,7*64);
+assert.throws(()=>swarmConstructorArgs({...config,intake:'0x'+'11'.repeat(20)},binding),/constant/);
+assert.throws(()=>swarmConstructorArgs(config,{...binding,factory:'0x'+'11'.repeat(20)}),/constant/);
 // v3.9 policy word: chainId[0:32] | fromBlock[32:80] | toBlock[80:128] | maxPrice[128:224] | heartbeatBps[224:240].
-const policy=BigInt(constructorArgs[5]),m32=(1n<<32n)-1n,m48=(1n<<48n)-1n,m96=(1n<<96n)-1n;
+const policy=BigInt(constructorArgs[1]),m32=(1n<<32n)-1n,m48=(1n<<48n)-1n,m96=(1n<<96n)-1n;
 assert.equal(policy&m32,1n);assert.equal((policy>>32n)&m48,26122900n);assert.equal((policy>>80n)&m48,26122901n);
 assert.equal((policy>>128n)&m96,500000000000000000n);assert.equal(policy>>224n,200n);
 assert.throws(()=>swarmConstructorArgs(config,{...binding,registryIndex:1}));

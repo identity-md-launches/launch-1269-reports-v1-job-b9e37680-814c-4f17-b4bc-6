@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IGameRegistry} from "./interfaces/IGameRegistry.sol";
 import {SwarmCode} from "./lib/SwarmCode.sol";
 import {ModuleCode} from "./lib/ModuleCode.sol";
+import {IMD} from "./lib/IMD.sol";
 import "./lib/Errors.sol";
 
 interface IEscrowFactory {
@@ -41,18 +42,16 @@ interface IEscrowParams {
 contract EndowmentEscrow is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    address public immutable factory;
-    address public immutable records;
+    /// @notice The IMD ProjectFactory and its launch registry, fixed in bytecode (v3.14, src/lib/IMD.sol).
+    address public constant factory = IMD.PROJECT_FACTORY;
+    address public constant records = IMD.PROJECT_RECORDS;
     address public immutable desk;
     bool public forwarded;
     event Forwarded(address indexed registry, address indexed pool, address indexed token, uint256 amount);
 
-    constructor(address factory_, address records_, address desk_) {
-        if (factory_ == address(0) || records_ == address(0) || desk_ == address(0) || factory_ == desk_) {
-            revert InvalidValue();
-        }
-        factory = factory_;
-        records = records_;
+    /// @param desk_ the SwarmDesk of the same launch ($contract:SwarmDesk).
+    constructor(address desk_) {
+        if (desk_ == address(0) || desk_ == factory || desk_ == records) revert InvalidValue();
         desk = desk_;
     }
 
@@ -91,7 +90,7 @@ contract EndowmentEscrow is ReentrancyGuard {
 
     function _proveRegistry(IEscrowRegistry r, uint64 launch, uint256 index, bytes calldata code) private view {
         bytes memory args = abi.encode(
-            r.token(), r.params(), r.market(), r.starterRoot(), r.freeRoot(), r.snapshotBlock(), r.endowment(), factory
+            r.token(), r.params(), r.market(), r.starterRoot(), r.freeRoot(), r.snapshotBlock(), r.endowment()
         );
         if (IEscrowFactory(factory).predictContract(launch, index, bytes.concat(code, args)) != address(r)) {
             revert InvalidProof();

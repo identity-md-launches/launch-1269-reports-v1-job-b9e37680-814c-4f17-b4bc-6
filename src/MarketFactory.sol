@@ -10,7 +10,6 @@ contract MarketFactory {
         address token;
         int24 tickSpacing;
         address launcher;
-        address applicationFactory;
         address desk;
         bytes32 gameConfigHash;
     }
@@ -20,16 +19,7 @@ contract MarketFactory {
         return keccak256(
             bytes.concat(
                 type(V4Market).creationCode,
-                abi.encode(
-                    c.manager,
-                    c.token,
-                    uint24(12500),
-                    c.tickSpacing,
-                    c.launcher,
-                    c.applicationFactory,
-                    c.desk,
-                    c.gameConfigHash
-                )
+                abi.encode(c.manager, c.token, uint24(12500), c.tickSpacing, c.launcher, c.desk, c.gameConfigHash)
             )
         );
     }
@@ -64,9 +54,8 @@ contract MarketFactory {
         address target = predict(c, salt);
         if (uint160(target) & 0x3fff != 0x10cc) revert InvalidAddress();
         if (target.code.length != 0) return V4Market(payable(target));
-        market = new V4Market{salt: salt}(
-            c.manager, c.token, 12500, c.tickSpacing, c.launcher, c.applicationFactory, c.desk, c.gameConfigHash
-        );
+        market =
+            new V4Market{salt: salt}(c.manager, c.token, 12500, c.tickSpacing, c.launcher, c.desk, c.gameConfigHash);
         emit MarketDeployed(address(market), salt);
     }
 }

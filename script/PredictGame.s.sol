@@ -38,7 +38,7 @@ contract PredictGame {
         ) revert InvalidValue();
         bytes memory registryCode = bytes.concat(
             type(GameRegistry).creationCode,
-            abi.encode(c.token, c.params, c.hook, c.starterRoot, c.freeRoot, c.snapshotBlock, c.endowment, c.factory)
+            abi.encode(c.token, c.params, c.hook, c.starterRoot, c.freeRoot, c.snapshotBlock, c.endowment)
         );
         registry = IApplicationFactory(c.factory).predictContract(c.registryLaunch, c.registryIndex, registryCode);
         remainderTo = IApplicationFactory(c.factory)

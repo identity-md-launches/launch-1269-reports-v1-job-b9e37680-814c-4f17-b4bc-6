@@ -12,10 +12,9 @@ contract StandardMarket is V4Market {
         uint24 fee_,
         int24 spacing_,
         address launcher_,
-        address factory_,
         address desk_,
         bytes32 gameConfigHash_
-    ) V4Market(manager_, token_, fee_, spacing_, launcher_, factory_, desk_, gameConfigHash_) {}
+    ) V4Market(manager_, token_, fee_, spacing_, launcher_, desk_, gameConfigHash_) {}
 
     function _surcharged() internal pure override returns (bool) {
         return false;

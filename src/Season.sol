@@ -11,7 +11,6 @@ import {Params} from "./Params.sol";
 import {FarmItems} from "./FarmItems.sol";
 import {IRewards, ICore} from "./interfaces/IGame.sol";
 import {ChainClock} from "./lib/ChainClock.sol";
-import {ItemMath} from "./lib/ItemMath.sol";
 import "./lib/Errors.sol";
 
 interface IPrizePacks {
@@ -363,9 +362,7 @@ contract Season is GameModule, ReentrancyGuard {
         if (!lotteryWon[w][msg.sender] || lotteryClaimed[w][msg.sender]) revert InvalidValue();
         lotteryClaimed[w][msg.sender] = true;
         _payPot(w, msg.sender, pot[w] * 10 / 100);
-        bytes32 seed = keccak256(abi.encode(seasons[w].seed, msg.sender));
-        (uint8 k,) = ItemMath.draw(seed, false, false);
-        uint8 r = uint256(seed) % 100 < 90 ? 2 : 3;
-        id = items().mint(msg.sender, k, r, true);
+        // v3.14: the item is a lazy pack receipt like claimDistrict, so a full inventory never blocks the pot share.
+        id = packs().rewardPack(msg.sender);
     }
 }

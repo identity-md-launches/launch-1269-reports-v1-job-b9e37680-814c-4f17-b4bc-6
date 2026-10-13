@@ -53,7 +53,8 @@ contract TwinCaptureV312Test is BaseTest {
                 )
             )
         );
-        escrow = new EndowmentEscrow(address(f), address(f), freshDesk);
+        escrow = new EndowmentEscrow(freshDesk);
+        market.configureHook(freshDesk, configHash); // the mock market answers the v3.14 bind probe for this Desk
         token.transfer(address(escrow), ENDOWMENT); // the token launch's remainderTo share
     }
 
@@ -73,8 +74,7 @@ contract TwinCaptureV312Test is BaseTest {
             d.registry.starterRoot(),
             d.registry.freeRoot(),
             d.registry.snapshotBlock(),
-            ENDOWMENT,
-            address(f)
+            ENDOWMENT
         );
         g.registry = GameRegistry(f.deploy(launch, 1, bytes.concat(registryCode, args)));
         g.pool = RewardPool(f.deploy(launch, 2, bytes.concat(poolCode, abi.encode(address(g.registry)))));

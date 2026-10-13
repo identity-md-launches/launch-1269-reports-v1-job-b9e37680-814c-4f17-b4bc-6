@@ -25,6 +25,7 @@ interface IHookRouter {
     function depositLaunchTax() external payable;
 }
 import {IV4PoolManager, PoolKey, SwapParams} from "./interfaces/IV4.sol";
+import {IMD} from "./lib/IMD.sol";
 import "./lib/Errors.sol";
 
 /// @notice Immutable ETH/token v4 hook + buy adapter, selected as the IMD launch pool's hook.
@@ -46,7 +47,8 @@ contract V4Market is ReentrancyGuard {
     address public immutable token;
     address public immutable launcher;
     bytes32 public immutable gameConfigHash;
-    IApplicationFactory public immutable applicationFactory;
+    /// @notice The IMD ProjectFactory, fixed in bytecode (v3.14, src/lib/IMD.sol): never a constructor word.
+    IApplicationFactory public constant applicationFactory = IApplicationFactory(IMD.PROJECT_FACTORY);
     IHookParams public params;
     IHookRouter public fees;
     uint256 public heldBase;
@@ -97,27 +99,26 @@ contract V4Market is ReentrancyGuard {
     uint24 public constant POOL_FEE = 12500;
     address public immutable desk;
 
-    /// @param launcher_ the LaunchFactory ($factory): it initializes the pool inside the launch transaction.
-    /// @param factory_ the ProjectFactory used to prove application contracts by CREATE2 prediction.
+    /// @param manager_ the PoolManager ($poolManager placeholder).
+    /// @param launcher_ the LaunchFactory ($factory placeholder): it initializes the pool inside the launch transaction.
     /// @param desk_ the already-deployed SwarmDesk bootstrap; the canonical game is the one it binds to.
     /// @param gameConfigHash_ keccak256(abi.encode(starterRoot, freeRoot, snapshotBlock, endowment)).
+    /// @dev v3.14: the ProjectFactory is the constant `applicationFactory`, no longer a constructor word.
     constructor(
         address manager_,
         address token_,
         uint24 fee_,
         int24 spacing_,
         address launcher_,
-        address factory_,
         address desk_,
         bytes32 gameConfigHash_
     ) {
         if (
-            gameConfigHash_ == bytes32(0) || launcher_ == address(0) || factory_ == address(0) || manager_ == address(0)
-                || token_ == address(0) || desk_ == address(0) || spacing_ <= 0 || spacing_ > 32767 || fee_ != POOL_FEE
+            gameConfigHash_ == bytes32(0) || launcher_ == address(0) || manager_ == address(0) || token_ == address(0)
+                || desk_ == address(0) || spacing_ <= 0 || spacing_ > 32767 || fee_ != POOL_FEE
         ) revert InvalidValue();
         gameConfigHash = gameConfigHash_;
         launcher = launcher_;
-        applicationFactory = IApplicationFactory(factory_);
         manager = IV4PoolManager(manager_);
         token = token_;
         desk = desk_;
@@ -172,16 +173,8 @@ contract V4Market is ReentrancyGuard {
 
     /// @dev Concatenation has a fixed, pinned creation-code prefix and one ABI tuple; no packed dynamic tuple.
     function _registryInitCode(GameRegistry r, address p) private view returns (bytes memory) {
-        bytes memory args = abi.encode(
-            r.token(),
-            p,
-            r.market(),
-            r.starterRoot(),
-            r.freeRoot(),
-            r.snapshotBlock(),
-            r.endowment(),
-            address(applicationFactory)
-        );
+        bytes memory args =
+            abi.encode(r.token(), p, r.market(), r.starterRoot(), r.freeRoot(), r.snapshotBlock(), r.endowment());
         return bytes.concat(type(GameRegistry).creationCode, args);
     }
 
@@ -291,9 +284,11 @@ contract V4Market is ReentrancyGuard {
         return 1e60 / averageETH;
     }
 
-    /// @notice Tokens a system buy of `ethAmount` receives at TWAP after the hook's 1% share.
+    /// @notice Tokens a system buy of `ethAmount` receives at TWAP after the hook's 1% share and the pool's
+    /// LP fee (v3.14, audit a8730286 H: the router's slippage band covers only impact and TWAP deviation).
     function quote(uint256 ethAmount) external view returns (uint256) {
         uint256 netInput = ethAmount - ethAmount * PROJECT_BPS / 10000;
+        netInput = netInput * (1_000_000 - poolFee) / 1_000_000;
         return Math.mulDiv(netInput, twap(), 1 ether);
     }
 
@@ -473,8 +468,10 @@ contract V4Market is ReentrancyGuard {
         buying = false;
     }
 
+    /// @notice ETH a system sell of `amount` receives at TWAP after the pool's LP fee and the hook's 1% (v3.14).
     function quoteSell(uint256 amount) public view returns (uint256) {
         uint256 gross = Math.mulDiv(amount, 1 ether, twap());
+        gross = gross * (1_000_000 - poolFee) / 1_000_000;
         return gross - gross * PROJECT_BPS / 10000;
     }
 

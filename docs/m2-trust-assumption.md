@@ -53,7 +53,7 @@ IMD launch numbers cannot be reserved, so nothing on chain separates the honest 
 | Withdraw tokens from the twin RewardPool | **No** | `pay`, `reserve` and `recycle` are `onlyRewards` (the registry's pinned FarmRewards, role 1). The attacker gets `Unauthorized`, and before a FarmRewards is registered nothing can pay at all. There is no owner, withdrawal or sweep (`testTwinCaptureCannotPayAttacker`) |
 | Change emission, prices or pauses | **No** | The twin's Params must name the same Desk as `swarmWallet` (checked in `bind`). The Desk acts only on attested oracle answers, inside hard-coded bounds |
 | Take hook ETH fees | **No** | `V4Market.bindFeeRouter` accepts only the bound registry's pinned FeeRouter (role 6). `FeeRouter` routes ETH into game rewards (pull payments to players). The team's 1% comes from `LaunchFactory.claimFees`, which goes to the paying wallet whichever registry is bound |
-| Change the token or the pool | **No** | The token and hook are already launched. The twin has to reuse them |
+| Change the token or the pool | **No** (enforced since v3.14) | `SwarmDesk.bind` probes `registry.market()` as a launch hook: `desk()` must be this Desk, `token()` the registry's token and `gameConfigHash()` the committed configuration (audit a8730286 M). A twin naming a foreign market or token reverts `InvalidProof` (`test/V314.t.sol`), so the hook's fee stream and the escrow can never be frozen by a capture |
 | Leave the honest job A/B contracts orphaned | **Yes** | The honest registry is never bound, so its pool never receives the endowment (`fundEndowment` reverts `InsufficientBalance`) and the hook never binds its FeeRouter |
 
 Net: **no tokens or ETH ever become withdrawable by the attacker.** The endowment still sits in a RewardPool

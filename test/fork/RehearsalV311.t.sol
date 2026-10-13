@@ -14,6 +14,8 @@ import {PackSale} from "../../src/PackSale.sol";
 import {FeeRouter} from "../../src/FeeRouter.sol";
 import {GridOperator} from "../../src/GridOperator.sol";
 import {V4Market} from "../../src/V4Market.sol";
+import {IMD} from "../../src/lib/IMD.sol";
+import {MockAttester} from "../mocks/MockAttester.sol";
 import {IArbSys} from "../../src/lib/ChainClock.sol";
 import {OracleAttestation} from "../../src/oracle/OracleAttestation.sol";
 import {IV4PoolManager, PoolKey, SwapParams} from "../../src/interfaces/IV4.sol";
@@ -101,7 +103,7 @@ contract RehearsalV311Test is Test {
     address internal constant POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
     address internal constant INTAKE = 0xa43e6F75ee006411F79Ac1C84120606C2330DE82;
     address internal constant DELIVERY = 0xCE0E6a670AA75E161d02aca3C7F00B94cA428CCb;
-    address internal constant IMD = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
+    address internal constant IMD_ASSET = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
     address internal constant TEAM = 0x6d51cBE774aeAe4dd40bCA2560E9bc2695A0d007;
     address internal constant ARBSYS = address(100);
     uint256 internal constant ENDOWMENT = 200_000_000 ether;
@@ -216,8 +218,8 @@ contract RehearsalV311Test is Test {
     function _oracle() internal view returns (SwarmDesk.OracleConfig memory o) {
         o.intake = INTAKE;
         o.delivery = DELIVERY;
-        o.signer = vm.addr(TEST_ATTESTER_KEY);
-        o.asset = IMD;
+        o.signer = IMD.ATTESTER; // fixed in bytecode; the fork test vouches for its key through an ERC-1271 stand-in
+        o.asset = IMD_ASSET;
         o.action = bytes32("oracle.request@oracle-1");
         o.maxPrice = 0.5 ether;
         o.questionChain = 1;
@@ -238,10 +240,13 @@ contract RehearsalV311Test is Test {
 
     function _m1Desk() internal {
         console2.log("M1 SwarmDesk bootstrap via ProjectFactory, launch", N_DESK);
+        // Fork only: the real attester key is not available, so an ERC-1271 stand-in at the constant attester
+        // address vouches for the throw-away test key (never done on a live chain).
+        vm.etch(IMD.ATTESTER, address(new MockAttester(vm.addr(TEST_ATTESTER_KEY))).code);
         SwarmDesk.BindingConfig memory b =
             SwarmDesk.BindingConfig(address(PF), 0, 0, 0, 0, s.gameConfigHash, 200, 1 ether);
         bytes memory args = SwarmArgs.encode(_oracle(), b);
-        assertEq(args.length, 12 * 32, "twelve static constructor words");
+        assertEq(args.length, 7 * 32, "seven static constructor words (v3.14)");
         bytes[] memory codes = new bytes[](1);
         codes[0] = bytes.concat(type(SwarmDesk).creationCode, args);
         string[] memory names = new string[](1);
@@ -251,15 +256,14 @@ contract RehearsalV311Test is Test {
         s.desk = SwarmDesk(d[0]);
         assertEq(address(s.desk.registry()), address(0), "unbound");
         assertEq(s.desk.bindingConfig().gameConfigHash, s.gameConfigHash);
-        assertEq(s.desk.oracleConfig().signer, vm.addr(TEST_ATTESTER_KEY), "test attester on the fork only");
+        assertEq(s.desk.oracleConfig().signer, IMD.ATTESTER, "the attester is fixed in bytecode (v3.14)");
         console2.log("  check Desk.registry() == 0: ok; attester (fork only)", vm.addr(TEST_ATTESTER_KEY));
     }
 
     function _m2Escrow() internal {
         console2.log("M2 EndowmentEscrow via ProjectFactory, launch", N_ESCROW);
         bytes[] memory codes = new bytes[](1);
-        codes[0] =
-            bytes.concat(type(EndowmentEscrow).creationCode, abi.encode(address(PF), address(PFR), address(s.desk)));
+        codes[0] = bytes.concat(type(EndowmentEscrow).creationCode, abi.encode(address(s.desk)));
         string[] memory names = new string[](1);
         names[0] = "EndowmentEscrow";
         (address[] memory d, uint256 g) = _launchContracts(N_ESCROW, codes, names);
@@ -274,16 +278,7 @@ contract RehearsalV311Test is Test {
     function _hookInitCode(address token) internal view returns (bytes memory) {
         return bytes.concat(
             type(V4Market).creationCode,
-            abi.encode(
-                POOL_MANAGER,
-                token,
-                uint24(12500),
-                int24(60),
-                address(LF),
-                address(PF),
-                address(s.desk),
-                s.gameConfigHash
-            )
+            abi.encode(POOL_MANAGER, token, uint24(12500), int24(60), address(LF), address(s.desk), s.gameConfigHash)
         );
     }
 
@@ -362,9 +357,7 @@ contract RehearsalV311Test is Test {
         address params = PF.predictContract(N_A, 0, codes[0]);
         codes[1] = bytes.concat(
             type(GameRegistry).creationCode,
-            abi.encode(
-                s.token, params, address(s.hook), s.starterRoot, s.freeRoot, s.snapshotBlock, ENDOWMENT, address(PF)
-            )
+            abi.encode(s.token, params, address(s.hook), s.starterRoot, s.freeRoot, s.snapshotBlock, ENDOWMENT)
         );
         names[1] = "GameRegistry";
         address registry = PF.predictContract(N_A, 1, codes[1]);

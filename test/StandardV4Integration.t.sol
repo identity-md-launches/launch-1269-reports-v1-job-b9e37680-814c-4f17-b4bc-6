@@ -46,7 +46,6 @@ contract StandardV4IntegrationTest is BaseTest {
                 uint24(12500),
                 int24(60),
                 address(this),
-                address(bindingFactory),
                 address(desk),
                 bindingConfigHash()
             )
@@ -59,14 +58,7 @@ contract StandardV4IntegrationTest is BaseTest {
             if (uint160(target) & 0x3fff == 0x10cc) break;
         }
         hook = new IntegrationStandardMarket{salt: salt}(
-            address(manager),
-            address(token),
-            12500,
-            60,
-            address(this),
-            address(bindingFactory),
-            address(desk),
-            bindingConfigHash()
+            address(manager), address(token), 12500, 60, address(this), address(desk), bindingConfigHash()
         );
         router = canonicalFees(address(hook));
         adapter =

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// Offline packing for the launcher's twelve-word SwarmDesk constructor (v3.9). No RPC or signing.
+// Offline packing for the launcher's seven-word SwarmDesk constructor (v3.14). No RPC or signing.
+// The intake, delivery, signer, asset and factory are bytecode constants (src/lib/IMD.sol): the config file
+// must still name them, and they must equal the constants, but they are never constructor words (deploy gate).
 // policyWord = chainId[0:32] | fromBlock[32:80] | toBlock[80:128] | maxPrice[128:224] | heartbeatBps[224:240].
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
@@ -29,13 +31,15 @@ export function policyWord(o,b) {
   if(bps<200n||bps>5000n||BigInt(b.heartbeatCap)!==10n**18n)throw Error('Invalid heartbeat configuration');
   return chain|(from<<32n)|(to<<80n)|(price<<128n)|(bps<<224n);
 }
+export const IMD_CONSTANTS={intake:'0xa43e6f75ee006411f79ac1c84120606c2330de82',delivery:'0xce0e6a670aa75e161d02aca3c7f00b94ca428ccb',
+  signer:'0x5598aa9146215bc13eb26f2c692ad1461fd32982',asset:'0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127',factory:'0x9c9d2fcb75c2c132c0ac0c42df3819a42347265e'};
 export function swarmConstructorArgs(o,b) {
-  if(o.intake.toLowerCase()===o.delivery.toLowerCase())throw Error('Duplicate callback endpoints');
+  for(const k of ['intake','delivery','signer','asset'])if(address(o[k],k).toLowerCase()!==IMD_CONSTANTS[k])throw Error(`${k} must equal the bytecode constant ${IMD_CONSTANTS[k]}`);
+  if(address(b.factory,'factory').toLowerCase()!==IMD_CONSTANTS.factory)throw Error(`factory must equal the bytecode constant ${IMD_CONSTANTS.factory}`);
   if(o.questions[0].toLowerCase()===o.questions[1].toLowerCase())throw Error('Duplicate question commitments');
-  return [address(o.intake,'intake'),address(o.delivery,'delivery'),address(o.signer,'signer'),address(o.asset,'asset'),
-    hash(o.action,'action'),policyWord(o,b).toString(),
+  return [hash(o.action,'action'),policyWord(o,b).toString(),
     hash(o.questions[0],'eventQuestion'),hash(o.questions[1],'regulatorQuestion'),hash(o.bodies[0],'eventBody'),hash(o.bodies[1],'regulatorBody'),
-    address(b.factory,'factory'),hash(b.gameConfigHash,'gameConfigHash')];
+    hash(b.gameConfigHash,'gameConfigHash')];
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
   if(process.argv.length!==4)throw Error('Usage: node tools/swarm_constructor_args.mjs oracle-config.json approved-binding.json');

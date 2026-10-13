@@ -12,6 +12,15 @@ contract MockMarket is IMarket {
         initializedAt = t;
         fees = f;
     }
+
+    /// @dev v3.14: SwarmDesk.bind probes the registry's market like the launch hook (desk, token, config hash).
+    address public desk;
+    bytes32 public gameConfigHash;
+
+    function configureHook(address desk_, bytes32 hash_) external {
+        desk = desk_;
+        gameConfigHash = hash_;
+    }
     uint256 public rate = 1_000_000 ether;
     bool public fail;
     uint256 public fillBps = 10000;

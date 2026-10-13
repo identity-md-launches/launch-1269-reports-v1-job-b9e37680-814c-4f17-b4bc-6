@@ -37,7 +37,6 @@ contract V4IntegrationTest is BaseTest {
                 uint24(12500),
                 int24(60),
                 address(this),
-                address(bindingFactory),
                 address(desk),
                 bindingConfigHash()
             )
@@ -50,14 +49,7 @@ contract V4IntegrationTest is BaseTest {
             if (uint160(target) & 0x3fff == 0x10cc) break;
         }
         hook = new IntegrationV4Market{salt: salt}(
-            address(manager),
-            address(token),
-            12500,
-            60,
-            address(this),
-            address(bindingFactory),
-            address(desk),
-            bindingConfigHash()
+            address(manager), address(token), 12500, 60, address(this), address(desk), bindingConfigHash()
         );
         router = canonicalFees(address(hook));
         vm.prank(team);

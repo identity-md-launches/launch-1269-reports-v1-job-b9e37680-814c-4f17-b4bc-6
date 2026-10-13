@@ -60,8 +60,7 @@ contract ReviewV34Test is BaseTest {
                 keccak256(abi.encode(uint256(17), alice)),
                 freePackRoot(),
                 uint256(23_000_000),
-                uint256(0),
-                address(bindingFactory)
+                uint256(0)
             )
         );
         GameRegistry registry = GameRegistry(bindingFactory.deploy(registryLaunch, 1, registryCode));
@@ -75,9 +74,7 @@ contract ReviewV34Test is BaseTest {
 
     function testCanonicalCompetingRegistryCannotTakeOverBinding() public {
         MockV4Manager manager = new MockV4Manager();
-        TestV4Market hook = new TestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        TestV4Market hook = new TestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         Params attackerParams = new Params(bob, 200, 1 ether);
         FeeRouter competing = _router(address(hook), address(attackerParams), 7);
 
@@ -100,9 +97,8 @@ contract ReviewV34Test is BaseTest {
     /// passes every static proof but is not the registry the Desk bound to, so the strict hook refuses it.
     function testSameConfigurationAtUncommittedCoordinatesCannotBind() public {
         MockV4Manager manager = new MockV4Manager();
-        StrictTestV4Market hook = new StrictTestV4Market(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        StrictTestV4Market hook =
+            new StrictTestV4Market(address(manager), address(token), address(desk), bindingConfigHash());
         FeeRouter competing = _router(address(hook), address(d.params), 8);
         vm.expectRevert(InvalidProof.selector);
         vm.prank(bob);

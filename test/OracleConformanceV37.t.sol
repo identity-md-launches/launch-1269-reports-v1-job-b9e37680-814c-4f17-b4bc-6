@@ -3,23 +3,14 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {SwarmDesk} from "../src/SwarmDesk.sol";
 import {SwarmArgs} from "../script/SwarmArgs.sol";
+import {IMD} from "../src/lib/IMD.sol";
+import {MockAttester} from "./mocks/MockAttester.sol";
 import {OracleAttestation} from "../src/oracle/OracleAttestation.sol";
 
 contract SwarmVectorHarness is SwarmDesk {
     constructor(OracleConfig memory o, BindingConfig memory b)
         SwarmDesk(
-            o.intake,
-            o.delivery,
-            o.signer,
-            o.asset,
-            o.action,
-            SwarmArgs.policy(o, b),
-            o.questions[0],
-            o.questions[1],
-            o.bodies[0],
-            o.bodies[1],
-            b.factory,
-            b.gameConfigHash
+            o.action, SwarmArgs.policy(o, b), o.questions[0], o.questions[1], o.bodies[0], o.bodies[1], b.gameConfigHash
         )
     {}
 
@@ -67,6 +58,8 @@ contract OracleConformanceV37Test is Test {
     function setUp() public {
         vm.chainId(VECTOR_CHAIN);
         vm.warp(ISSUED_AT);
+        // v3.14: the Desk's signer is the constant attester; the vector's test key is vouched for through ERC-1271.
+        vm.etch(IMD.ATTESTER, address(new MockAttester(SIGNER)).code);
         SwarmDesk.OracleConfig memory o;
         o.intake = makeAddr("intake");
         o.delivery = makeAddr("delivery");

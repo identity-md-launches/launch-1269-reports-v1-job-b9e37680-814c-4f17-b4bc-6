@@ -8,11 +8,14 @@ import {SwarmArgs} from "../script/SwarmArgs.sol";
 import {OracleAttestation, OracleAttestationConsumer} from "../src/oracle/OracleAttestation.sol";
 import {MockSwarmIntake, MockSwarmDelivery} from "./mocks/MockSwarmIntake.sol";
 import {Params} from "../src/Params.sol";
+import {MockToken} from "./mocks/MockToken.sol";
 import {GridOperator} from "../src/GridOperator.sol";
+import {IMD} from "../src/lib/IMD.sol";
 import "../src/lib/Errors.sol";
 
 contract SwarmDeskV37Test is BaseTest {
     MockSwarmIntake private intake;
+    MockToken private imd;
     MockSwarmDelivery private delivery;
     uint256 private nonce;
 
@@ -31,7 +34,10 @@ contract SwarmDeskV37Test is BaseTest {
         vm.etch(o.delivery, address(relay).code);
         delivery = MockSwarmDelivery(o.delivery);
         vm.warp((block.timestamp / 6 hours) * 6 hours + 2 hours);
-        token.transfer(address(desk), 10 ether);
+        // The Desk pays the Intake in the bytecode-constant IMD asset: a mock token at that address (v3.14).
+        vm.etch(o.asset, address(token).code);
+        imd = MockToken(o.asset);
+        imd.mint(address(desk), 10 ether);
     }
 
     function eventValues() private view returns (bytes32[] memory v) {
@@ -252,10 +258,10 @@ contract SwarmDeskV37Test is BaseTest {
     function testBackupPullsExactPriceRecordsRequestAndRestrictsBodyAndCadence() public {
         vm.expectRevert(InvalidProof.selector);
         desk.askBackup(0, bytes("arbitrary"));
-        uint256 before_ = token.balanceOf(address(desk));
+        uint256 before_ = imd.balanceOf(address(desk));
         bytes32 id = desk.askBackup(0, bytes("event body"));
-        assertEq(before_ - token.balanceOf(address(desk)), 0.5 ether);
-        assertEq(token.allowance(address(desk), address(intake)), 0);
+        assertEq(before_ - imd.balanceOf(address(desk)), 0.5 ether);
+        assertEq(imd.allowance(address(desk), address(intake)), 0);
         assertEq(intake.failureSelector(), desk.onOracleFailure.selector);
         vm.expectRevert(TooEarly.selector);
         desk.askBackup(0, bytes("event body"));
@@ -373,7 +379,7 @@ contract SwarmDeskV37Test is BaseTest {
     }
 
     function testEmptyChainConstructorAndAuthenticatedBindingRejectSpoofs() public {
-        LocalApplicationFactory f = new LocalApplicationFactory();
+        LocalApplicationFactory f = deployment.localFactory();
         SwarmDesk fresh;
         {
             SwarmDesk.BindingConfig memory b = desk.bindingConfig();
@@ -399,47 +405,48 @@ contract SwarmDeskV37Test is BaseTest {
         bytes memory pCode = type(Params).creationCode;
         bytes memory rCode = type(GameRegistry).creationCode;
         Params p =
-            Params(f.deploy(1, 0, bytes.concat(pCode, abi.encode(address(fresh), uint256(200), uint256(1 ether)))));
+            Params(f.deploy(61, 0, bytes.concat(pCode, abi.encode(address(fresh), uint256(200), uint256(1 ether)))));
         GameRegistry r = GameRegistry(
-            f.deploy(1, 1, bytes.concat(rCode, _registryArgs(address(p), d.registry.starterRoot(), address(f))))
+            f.deploy(61, 1, bytes.concat(rCode, _registryArgs(address(p), d.registry.starterRoot(), address(f))))
         );
+        market.configureHook(address(fresh), fresh.bindingConfig().gameConfigHash); // v3.14 bind probe
         vm.expectRevert(InvalidProof.selector);
-        fresh.bind(address(r), hex"ff", pCode, 1, 1, 1, 0);
+        fresh.bind(address(r), hex"ff", pCode, 61, 1, 61, 0);
         vm.expectRevert(InvalidProof.selector);
-        fresh.bind(address(r), rCode, hex"ff", 1, 1, 1, 0);
+        fresh.bind(address(r), rCode, hex"ff", 61, 1, 61, 0);
         vm.expectRevert(InvalidProof.selector);
-        fresh.bind(address(d.registry), rCode, pCode, 1, 1, 1, 0);
+        fresh.bind(address(d.registry), rCode, pCode, 61, 1, 61, 0);
         {
             GameRegistry spoof = _lookalike(address(p), d.registry.starterRoot(), address(f));
             vm.expectRevert(InvalidProof.selector);
-            fresh.bind(address(spoof), rCode, pCode, 1, 1, 1, 0);
+            fresh.bind(address(spoof), rCode, pCode, 61, 1, 61, 0);
         }
         {
             GameRegistry wrongRoot = _lookalike(address(p), keccak256("wrong root"), address(f));
             vm.expectRevert(InvalidProof.selector);
-            fresh.bind(address(wrongRoot), rCode, pCode, 1, 1, 1, 0);
+            fresh.bind(address(wrongRoot), rCode, pCode, 61, 1, 61, 0);
         }
         // Correct proof at the wrong coordinates fails; zero coordinates are refused outright.
         vm.expectRevert(InvalidProof.selector);
-        fresh.bind(address(r), rCode, pCode, 2, 1, 1, 0);
+        fresh.bind(address(r), rCode, pCode, 62, 1, 61, 0);
         vm.expectRevert(InvalidProof.selector);
-        fresh.bind(address(r), rCode, pCode, 1, 1, 1, 1);
+        fresh.bind(address(r), rCode, pCode, 61, 1, 61, 1);
         vm.expectRevert(InvalidValue.selector);
-        fresh.bind(address(r), rCode, pCode, 0, 1, 1, 0);
+        fresh.bind(address(r), rCode, pCode, 0, 1, 61, 0);
         vm.prank(bob);
-        fresh.bind(address(r), rCode, pCode, 1, 1, 1, 0);
+        fresh.bind(address(r), rCode, pCode, 61, 1, 61, 0);
         assertEq(address(fresh.registry()), address(r));
-        assertEq(fresh.bindingConfig().registryLaunch, 1);
+        assertEq(fresh.bindingConfig().registryLaunch, 61);
         assertEq(fresh.bindingConfig().paramsIndex, 0);
         vm.expectRevert(AlreadyDone.selector);
-        fresh.bind(address(r), rCode, pCode, 1, 1, 1, 0);
+        fresh.bind(address(r), rCode, pCode, 61, 1, 61, 0);
         vm.expectRevert(AlreadyDone.selector);
-        f.deploy(1, 1, bytes.concat(rCode, abi.encode("different initcode")));
+        f.deploy(61, 1, bytes.concat(rCode, abi.encode("different initcode")));
     }
 
     /// @dev Registry constructor arguments of the fixture game with a chosen starter root (keeps the bind tests
     /// within the legacy, non-via-IR stack limit).
-    function _registryArgs(address params, bytes32 starterRoot, address factory) private view returns (bytes memory) {
+    function _registryArgs(address params, bytes32 starterRoot, address) private view returns (bytes memory) {
         return abi.encode(
             address(token),
             params,
@@ -447,8 +454,7 @@ contract SwarmDeskV37Test is BaseTest {
             starterRoot,
             d.registry.freeRoot(),
             d.registry.snapshotBlock(),
-            d.registry.endowment(),
-            factory
+            d.registry.endowment()
         );
     }
 
@@ -481,17 +487,17 @@ contract SwarmDeskV37Test is BaseTest {
         b.paramsLaunch = 0;
         b.paramsIndex = 0;
         bytes memory args = SwarmArgs.encode(o, b);
-        assertEq(args.length, 12 * 32);
+        assertEq(args.length, 7 * 32);
         bytes memory code = vm.getCode("SwarmDesk.sol:SwarmDesk");
-        LocalApplicationFactory f = new LocalApplicationFactory();
-        // Word 5 is the packed policy word; bits 240-255 are reserved and must be zero.
+        LocalApplicationFactory f = deployment.localFactory();
+        // Word 1 is the packed policy word; bits 240-255 are reserved and must be zero.
         uint256 badPolicy = SwarmArgs.policy(o, b) | (uint256(1) << 240);
-        assembly ("memory-safe") { mstore(add(args, 192), badPolicy) }
+        assembly ("memory-safe") { mstore(add(args, 64), badPolicy) }
         vm.expectRevert(InvalidValue.selector);
         f.deploy(5, 0, bytes.concat(code, args));
         args = SwarmArgs.encode(o, b);
         badPolicy = SwarmArgs.policy(o, b) | (uint256(1) << 255);
-        assembly ("memory-safe") { mstore(add(args, 192), badPolicy) }
+        assembly ("memory-safe") { mstore(add(args, 64), badPolicy) }
         vm.expectRevert(InvalidValue.selector);
         f.deploy(5, 0, bytes.concat(code, args));
         // The round trip of the packed word reproduces every configured value.

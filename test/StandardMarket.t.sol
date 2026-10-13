@@ -8,9 +8,7 @@ import {MockV4Manager} from "./mocks/MockV4Manager.sol";
 import {SwapParams} from "../src/interfaces/IV4.sol";
 
 contract TestStandardMarket is StandardMarket {
-    constructor(address m, address t, address f, address k, bytes32 c)
-        StandardMarket(m, t, 12500, 60, msg.sender, f, k, c)
-    {}
+    constructor(address m, address t, address k, bytes32 c) StandardMarket(m, t, 12500, 60, msg.sender, k, c) {}
     function _validateHookAddress() internal pure override {}
 
     function _canonical(GameRegistry) internal pure override returns (bool) {
@@ -26,9 +24,7 @@ contract StandardMarketTest is BaseTest {
     function setUp() public override {
         super.setUp();
         manager = new MockV4Manager();
-        hook = new TestStandardMarket(
-            address(manager), address(token), address(bindingFactory), address(desk), bindingConfigHash()
-        );
+        hook = new TestStandardMarket(address(manager), address(token), address(desk), bindingConfigHash());
         fees = canonicalFees(address(hook));
         vm.prank(team);
         bindHook(hook, address(fees));

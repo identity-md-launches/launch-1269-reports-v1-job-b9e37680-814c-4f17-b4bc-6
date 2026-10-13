@@ -30,6 +30,8 @@ interface IEconomyCore {
 contract Economy is GameModule, ReentrancyGuard {
     using SafeERC20 for IERC20;
     uint256 public constant FARM_FLOOR = 3000 ether;
+    /// @notice v3.14: bound of the sorted lock-list walk per insertion (districtStake reads the top ten).
+    uint256 public constant MAX_INSERT_STEPS = 32;
     uint256 public constant HASH_RATE_FLOOR = 0.000001 ether * 1 ether; // per six-hour epoch per hash
 
     struct Lock {
@@ -172,10 +174,14 @@ contract Economy is GameModule, ReentrancyGuard {
     function _insert(uint256 d, address p) private {
         address cursor = head[d];
         address prev;
-        // User pays for insertion only. Epoch snapshots inspect at most the top ten wallets.
-        while (cursor != address(0) && locks[cursor].amount >= locks[p].amount) {
+        // User pays for insertion only. Epoch snapshots inspect at most the top ten wallets, so the walk is
+        // bounded to MAX_INSERT_STEPS (v3.14): a flooded district costs at most 32 steps and the sorted prefix
+        // that districtStake reads stays exact.
+        uint256 steps;
+        while (cursor != address(0) && locks[cursor].amount >= locks[p].amount && steps < MAX_INSERT_STEPS) {
             prev = cursor;
             cursor = next[cursor];
+            ++steps;
         }
         previous[p] = prev;
         next[p] = cursor;

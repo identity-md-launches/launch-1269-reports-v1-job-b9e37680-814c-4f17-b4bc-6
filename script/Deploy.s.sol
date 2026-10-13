@@ -19,6 +19,8 @@ import {Enhancement} from "../src/Enhancement.sol";
 import {Billboards} from "../src/Billboards.sol";
 import {Civic} from "../src/Civic.sol";
 import {Season} from "../src/Season.sol";
+import {IMD} from "../src/lib/IMD.sol";
+import {MockAttester} from "../test/mocks/MockAttester.sol";
 import "../src/lib/Errors.sol";
 
 /// @dev Local fixture for the platform's predictContract/CREATE2 behavior, never a launch target.
@@ -52,6 +54,13 @@ contract LocalApplicationFactory {
         bytes32 salt = keccak256(abi.encode(launchNumber, index));
         assembly ("memory-safe") { result := create2(0, add(initCode, 32), mload(initCode), salt) }
         if (result == address(0)) revert InvalidValue();
+    }
+}
+
+/// @dev Stands in for the ProjectFactory's launch registry: a launch is recorded once the local factory deployed it.
+contract LocalLaunchRecords {
+    function isRecorded(uint64 launchNumber) external view returns (bool) {
+        return LocalApplicationFactory(IMD.PROJECT_FACTORY).isRecorded(launchNumber);
     }
 }
 
@@ -89,7 +98,13 @@ contract Deploy is Script {
         Billboards billboards;
     }
 
+    /// @dev v3.14: the factory is shared (one constant address), so each later deployment in the same VM takes
+    /// its own launch numbers (offset 1000 per generation); the first keeps the historical 1/3/8/9 numbers.
+    uint64 public generation;
+    uint64 private offset;
+
     function deploy(Config memory c) public returns (Deployment memory d) {
+        offset = 1000 * generation++;
         if (
             c.token == address(0) || c.oracle.length == 0 || c.market == address(0) || c.launchTime == 0
                 || c.freeRoot == bytes32(0) || c.starterRoot == bytes32(0) || c.snapshotBlock == 0
@@ -98,17 +113,35 @@ contract Deploy is Script {
             c.endowmentBps != 0 && c.endowmentBps != 1000 && c.endowmentBps != 1500 && c.endowmentBps != 2000
                 && c.endowmentBps != 2500
         ) revert InvalidValue();
-        LocalApplicationFactory factory = new LocalApplicationFactory();
+        LocalApplicationFactory factory = localFactory();
         SwarmDesk desk = _desk(factory, c);
         d.params = Params(
             factory.deploy(
-                1,
+                1 + offset,
                 0,
                 abi.encodePacked(type(Params).creationCode, abi.encode(address(desk), c.heartbeatBps, c.heartbeatCap))
             )
         );
         d.registry = _registry(factory, c, address(d.params));
-        desk.bind(address(d.registry), type(GameRegistry).creationCode, type(Params).creationCode, 1, 1, 1, 0);
+        // A mock market learns the Desk and configuration it must answer for at bind time (v3.14 probe).
+        (bool configured,) = c.market
+            .call(
+                abi.encodeWithSignature(
+                    "configureHook(address,bytes32)",
+                    address(desk),
+                    keccak256(abi.encode(c.starterRoot, c.freeRoot, c.snapshotBlock, _endowment(c)))
+                )
+            );
+        configured;
+        desk.bind(
+            address(d.registry),
+            type(GameRegistry).creationCode,
+            type(Params).creationCode,
+            1 + offset,
+            1,
+            1 + offset,
+            0
+        );
         address[14] memory modules = _modules(factory, address(d.registry));
         d.pool = RewardPool(modules[0]);
         d.rewards = FarmRewards(modules[1]);
@@ -124,6 +157,18 @@ contract Deploy is Script {
         d.enhancement = Enhancement(modules[11]);
         d.civic = Civic(modules[12]);
         d.billboards = Billboards(modules[13]);
+    }
+
+    /// @dev v3.14: the contracts fix the IMD ProjectFactory and its launch registry in bytecode, so the local
+    /// fixture lives at those addresses (etched once per test VM; the records mock forwards isRecorded).
+    function localFactory() public returns (LocalApplicationFactory factory) {
+        factory = LocalApplicationFactory(IMD.PROJECT_FACTORY);
+        if (address(factory).code.length == 0) {
+            vm.etch(IMD.PROJECT_FACTORY, address(new LocalApplicationFactory()).code);
+            vm.etch(IMD.PROJECT_RECORDS, address(new LocalLaunchRecords()).code);
+            // The attester is fixed in bytecode; local tests sign with key 0x123456 through an ERC-1271 stand-in.
+            vm.etch(IMD.ATTESTER, address(new MockAttester(vm.addr(0x123456))).code);
+        }
     }
 
     function _endowment(Config memory c) private pure returns (uint256) {
@@ -143,7 +188,7 @@ contract Deploy is Script {
             c.heartbeatCap
         );
         bytes memory args = SwarmArgs.encode(abi.decode(c.oracle, (SwarmDesk.OracleConfig)), binding);
-        return SwarmDesk(factory.deploy(3, 0, bytes.concat(vm.getCode("SwarmDesk.sol:SwarmDesk"), args)));
+        return SwarmDesk(factory.deploy(3 + offset, 0, bytes.concat(vm.getCode("SwarmDesk.sol:SwarmDesk"), args)));
     }
 
     function _registry(LocalApplicationFactory factory, Config memory c, address params)
@@ -151,9 +196,9 @@ contract Deploy is Script {
         returns (GameRegistry)
     {
         bytes memory args = abi.encode(
-            c.token, params, c.market, c.starterRoot, c.freeRoot, c.snapshotBlock, _endowment(c), address(factory)
+            c.token, params, c.market, c.starterRoot, c.freeRoot, c.snapshotBlock, _endowment(c)
         );
-        return GameRegistry(factory.deploy(1, 1, abi.encodePacked(type(GameRegistry).creationCode, args)));
+        return GameRegistry(factory.deploy(1 + offset, 1, abi.encodePacked(type(GameRegistry).creationCode, args)));
     }
 
     function _modules(LocalApplicationFactory factory, address registry) private returns (address[14] memory modules) {
@@ -175,7 +220,7 @@ contract Deploy is Script {
         ];
         for (uint256 i; i < 14; ++i) {
             bytes memory code = vm.getCode(string.concat(names[i], ".sol:", names[i]));
-            uint64 launchNumber = i < 6 ? 1 : 2;
+            uint64 launchNumber = (i < 6 ? 1 : 2) + offset;
             uint256 index = i < 6 ? i + 2 : i - 6;
             modules[i] = factory.deploy(launchNumber, index, abi.encodePacked(code, abi.encode(registry)));
             assert(GameRegistry(registry).register(i, launchNumber, index, code) == modules[i]);

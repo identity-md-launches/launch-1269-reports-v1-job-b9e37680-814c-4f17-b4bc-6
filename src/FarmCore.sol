@@ -399,6 +399,7 @@ contract FarmCore is GameModule, ReentrancyGuard, IERC1155Receiver {
 
     /// @notice Remove an empty farm from future settlement rosters; past season entitlements remain.
     function retire(address p) external nonReentrant {
+        if (msg.sender != p) revert Unauthorized(); // v3.14: only the owner retires their own farm
         _prepare(p);
         Farm storage f = farms[p];
         for (uint256 i; i < 24; ++i) {

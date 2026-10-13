@@ -280,3 +280,49 @@ pause (new packs incl. the ETH zap and black-market buys) comes from an attested
 72 hours and needs 72 live hours between pauses. If oracle answers stop, epochs keep running on the fallback
 event table and the current Params. Pack profile Balanced, roots, snapshot block and endowment are fixed at
 deploy.
+
+## 5. v3.14: four launches, constructor words, expected creation hashes (supersedes §3 M1–M7)
+
+Audit a8730286 fixes and the deploy gate (refusal of launch 1557) changed the pins. Every IMD protocol address
+is now a bytecode constant (`src/lib/IMD.sol`); no constructor word may equal one (`node tools/check_deploy_gate.mjs`
+verifies this table and the lines below). Toolchain for every launch: the repo `foundry.toml` pins (solc 0.8.26,
+optimizer 200, cancun) with the IMD launch build (viaIR false, bytecode_hash none; `out-launch/`). GAME_CONFIG_HASH
+`0x11ed7438974e96ecc962201e9c46422c7bf239d725876863fa25a56c734b20d3` is unchanged (roots and snapshot unchanged).
+**NO SOURCE CHANGES** after this commit: the contracts authenticate each other by creation-code hash.
+
+| Launch | Contract | Constructor words | Expected creation hash (launch build) |
+|---|---|---|---|
+| L1 (`evm_contracts`, 2 contracts) | `SwarmDesk(<ACTION>, <POLICY_WORD>, <EVENT_QUESTION>, <REGULATOR_QUESTION>, <EVENT_BODY>, <REGULATOR_BODY>, <GAME_CONFIG_HASH>)` constructor words | seven words from `node tools/swarm_constructor_args.mjs docs/oracle-v37/oracle-config.json binding.json` | `0x1529298271e9c3d2700de32d1be2a64f712b07213a32eb8fdb0c4e37c0d06899` |
+| L1 | `EndowmentEscrow($contract:SwarmDesk)` constructor words | the Desk of the same launch | `0xca3226021c259bf399599eb8dc489fe401bf2b71570808ec33deea1c85ff5d35` |
+| L2 (`univ4_hook`, pairWith eth, poolBps 7000, remainderTo = the L1 escrow) | `V4Market($poolManager, $token, 12500, 60, $factory, <DESK>, <GAME_CONFIG_HASH>)` constructor words | platform placeholders plus the L1 Desk | `0x265a61697cdce9ce2888a1572d74df75a8c9efc2c0f7059f82054a4a8c2811b1` |
+| L3 job A (`evm_contracts`, 8) | `Params(<DESK>, 200, 1000000000000000000)` constructor words | | `0x26c9f36af040b02eba9644f52daeed84fae4e42eab9bdb23277d0bb28c6dc6c0` (`SwarmCode.PARAMS_LAUNCH`) |
+| L3 | `GameRegistry(<TOKEN>, $contract:Params, <HOOK>, <STARTER_ROOT>, <FREE_ROOT>, <SNAPSHOT_BLOCK>, 200000000000000000000000000)` constructor words | | `0xc3f63ca18e4734d9e56e6fa38b8015c1a1cdc41caec1fafa2eb1466c380ea42b` (`SwarmCode.REGISTRY_LAUNCH`) |
+| L3 | `RewardPool($contract:GameRegistry)` constructor words | | `0xecf3ae5ebb791318703b5e79960cfd243b7d89bdffa0e0501bee5146623764de` |
+| L3 | `FarmRewards($contract:GameRegistry)` constructor words | | `0xf8f9f93e6bd8df85caaf5c508a71fb285a2f6229a5ef54023ac49ba66a14a001` |
+| L3 | `FarmCore($contract:GameRegistry)` constructor words | | `0xd6b7d7555a5865832a6d352b2a0bfa96ea10857b076a4cc156d5ad78cd1044fa` |
+| L3 | `FarmItems($contract:GameRegistry)` constructor words | | `0x98f7224201d9e7e3d16bd8996c29a522cac5bd1b375181de8cfdc2c6b9639e76` |
+| L3 | `PackSale($contract:GameRegistry)` constructor words | | `0x7ecf36d55a73c01094e4434de085dfb39f17a1deda39a52ee38954f3a8e8737a` |
+| L3 | `StarterClaim($contract:GameRegistry)` constructor words | | `0x960e2782608b572a1385ec22ed3e1fb49cd0cccd9b3455ce7bf7f22e990dbd90` |
+| L4 job B (`evm_contracts`, 8) | `FeeRouter(<REGISTRY>)` constructor words | | `0x822b0019d9ad6ec252238f71b8a8b2b258ddf4fa0bc1311962ef2c5614c9582d` |
+| L4 | `GridOperator(<REGISTRY>)` constructor words | | `0xf21418187e35f2785dfd16075ad4b1bf855552ac4b413592f29d7222777974e9` |
+| L4 | `Season(<REGISTRY>)` constructor words | | `0xa79fdfbecdb2450bc94c1cedac7618b1f4244fe63c3f1bc6fea784f82cd42c83` |
+| L4 | `FarmEngine(<REGISTRY>)` constructor words | | `0x48a9f8dd8c707a2a8c6b4a1838640be765a3e3c9d2306680bda5ce679b6dbe7c` |
+| L4 | `Economy(<REGISTRY>)` constructor words | | `0xae240fd79ae988f63706fa09ca1c6b72a8ab30b448c3240b4d21d72d6d408060` |
+| L4 | `Enhancement(<REGISTRY>)` constructor words | | `0x19ff379fb18f8649bc3889c3f8981bcf40d7c4045fe066dde9014b55b9751689` |
+| L4 | `Civic(<REGISTRY>)` constructor words | | `0xb3e89ec00b8ad51904cdac336644a6025ceea25c15fa931cac2ad13d89dc0bb2` |
+| L4 | `Billboards(<REGISTRY>)` constructor words | | `0x3cb8b542f7baa025b6db7f2a4864288a594d05e75b9b4e9ec66416c1fe52aa60` |
+
+Objective texts (fill the `<...>` values; append the common paragraph of §3 with "v3.14" in place of "v3.12",
+then paste the accepted list from [docs/accepted-v314.md](docs/accepted-v314.md) verbatim):
+
+> **L1.** BLACKOUT SwarmDesk + EndowmentEscrow on Robinhood Chain (4663), evm_contracts, two contracts: [0] SwarmDesk with the seven static words above; [1] EndowmentEscrow($contract:SwarmDesk). The Intake, IntakeDelivery, attester, Robinhood IMD and ProjectFactory (and its launch registry) are constants in the bytecode, never constructor words. NO SOURCE CHANGES. Expected creation hashes: SwarmDesk 0x1529…6899, EndowmentEscrow 0xca32…5d35. <COMMON PARAGRAPH> <ACCEPTED LIST>
+>
+> **L2.** BLACKOUT token launch (univ4_hook, pairWith eth, poolBps 7000, remainderTo <ESCROW> from L1). Hook V4Market($poolManager, $token, 12500, 60, $factory, <DESK>, <GAME_CONFIG_HASH>); the ProjectFactory is a bytecode constant. quote()/quoteSell() net the pool's 1.25% LP fee (audit H). NO SOURCE CHANGES. Expected creation hash 0x265a…11b1. Paying wallet 0x6d51cBE774aeAe4dd40bCA2560E9bc2695A0d007. <ACCEPTED LIST>
+>
+> **L3 (job A).** Eight contracts in the order of the table (Params, GameRegistry with $contract:Params, then six modules with $contract:GameRegistry). The GameRegistry no longer takes a factory word. The Desk binds right after (docs/m2-trust-assumption.md; bind now probes the market). NO SOURCE CHANGES. Expected hashes as in the table. <COMMON PARAGRAPH> <ACCEPTED LIST>
+>
+> **L4 (job B).** Eight contracts, each with the single word <REGISTRY>: FeeRouter, GridOperator, Season, FarmEngine, Economy, Enhancement, Civic, Billboards. NO SOURCE CHANGES. Expected hashes as in the table. <COMMON PARAGRAPH> <ACCEPTED LIST>
+
+After L1–L4: `Desk.bind(<REGISTRY>, registryCode, paramsCode, <N_A>, 1, <N_A>, 0)`, `register` 0–13,
+`bindFeeRouter(<FEE_ROUTER>, <N_A>, 1)`, `forward(<REGISTRY>, <N_A>, 1, registryCode, <N_A>, 2, poolCode)`,
+`fundEndowment`, schedules and keeper exactly as M5–M13 above.
